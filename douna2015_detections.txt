@@ -1,0 +1,9 @@
+SBS0335-052    7.29    0.44    39.52   38.95    9.14e7  0.05e7      https://iopscience.iop.org/article/10.3847/1538-4357/ae29aa
+VIIZw403       7.69    0.014   38.62   37.14    6.5e7   3e7         https://iopscience.iop.org/article/10.1088/0004-6256/142/3/82/pdf
+Mrk71          7.85    0.041   38.34   38.3     1.6e5   5e4         https://iopscience.iop.org/article/10.3847/1538-4357/aa830b/pdf
+NGC4631        8.13    4       39.71   37.09    1.4e10  4e9         https://arxiv.org/pdf/1105.4610
+NGC3034        8.36    10.5    39.86   36.86    2.4e10  7e9         https://arxiv.org/pdf/1105.4610
+NGC4038-39     8.4     5.4     40.25   36.92    3.1e10  9e9         https://arxiv.org/pdf/1105.4610
+NGC3079        8.57    6       39.65   37.98    4.0e10  1e10        https://arxiv.org/pdf/1105.4610
+NGC5775        8.64    5.3     40.52   38.01    6.3e10  2e10        https://arxiv.org/pdf/1105.4610
+NGC4194        8.67    16.8    40.42   38.64    2.1e10  6e9         https://arxiv.org/pdf/1105.4610

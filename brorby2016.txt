@@ -1,0 +1,10 @@
+HARO11     8.33 54.6 98.1  2.22 0.07     6.9e9   2e9     https://arxiv.org/abs/1602.01091_assumed_30%_error
+KUG0820    8.23 19.3 34.4  2.7  0.4      4.1e8   1e8     https://arxiv.org/abs/1602.01091_assumed_30%_error
+KUG0842    8.80 10.6 18.8  2.6  0.7      1.2e11  4e10    https://arxiv.org/abs/1602.01091_assumed_30%_error
+SHOC011    8.20 22.5 39.9  3.3  0.6      1.9e9   6e8     https://arxiv.org/abs/1602.01091_assumed_30%_error
+SHOC263    8.19 18.0 32.0  2.6  0.7      2.3e9   7e8     https://arxiv.org/abs/1602.01091_assumed_30%_error
+J080619.49 8.15 16.0 28.5  1.3  0.3      1.8e9   5e8     https://arxiv.org/abs/1602.01091_assumed_30%_error
+J225140.31 8.15 7.85 13.9  2.0  0.3      1.4e9   4e8     https://arxiv.org/abs/1602.01091_assumed_30%_error
+SHOC024    8.28 72.3 129.9 4.3  1.4      4.6e9   1e9     https://arxiv.org/abs/1602.01091_assumed_30%_error
+J082413.12 8.35 28.2 50.3  5.6  1.0      1.7e10  5e9     https://arxiv.org/abs/1602.01091_assumed_30%_error
+SHOC595    8.30 32.0 57.3  5.2  1.5      3.0e9   9e8     https://arxiv.org/abs/1602.01091_assumed_30%_error

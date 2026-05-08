@@ -1,0 +1,4 @@
+UGC4483    7.54    0.004   37.55    1.0e7   0.3e7   https://www.aanda.org/articles/aa/pdf/2012/08/aa19457-12.pdf
+Mrk209     7.77    0.037   37.96    1e7     6e6     assumed_similar_mass_to_UGC4483_with_60%_error_SFR_corrected_to_salpeter
+UM461      7.85    0.015   37.66    5.0e6   4e6     https://iopscience.iop.org/article/10.3847/1538-4357/aca3a9/pdf_SFR_corrected_to_salpeter
+IIZw40     8.00    1.32    39.86    5e7     3e7     assumed_between_1e7_and_1e8_with_60%_error_since_BCD
