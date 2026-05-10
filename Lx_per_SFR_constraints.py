@@ -14,7 +14,7 @@ Douna objects to check SFR IMFs:
 
 ### Constraints on Lx per SFR at various metallicities for short-lived population (<100myr) ###
 
-IMF = 'Salpeter' # IMF used for SFR estimates in all datasets, so we don't need to convert between different IMFs
+IMF = 'Kroupa' # IMF used for SFR estimates in all datasets, so we don't need to convert between different IMFs
 plot_models = True
 salp_to_kr_SFR = 0.67 # from Madau & Dickinson 2014
 kr_to_salp_SFR = 1 / salp_to_kr_SFR
@@ -414,7 +414,7 @@ if plot_models:
 
     # import Lx/SFR simulations for all models and extract z=0 values. interpolate over metallicity to get Lx/SFR against metallicity for each model.
     # plot these against metallicity over the observations to have a look
-    imfstring = 'PL-0.1-100-2.35'
+    imfstring = 'Kr3-canonical-2.7-100'
     bf = 0.5
     KeV_to_Hz = 2.417990504024e17
     freq_lower_cutoff = 0.5*KeV_to_Hz
@@ -436,17 +436,37 @@ if plot_models:
 
     model_metallicities = np.array([0.00056, 0.0018, 0.005, 0.008, 0.016]) # absolute Z
     model_bh_prescriptions = np.array([2])
-    model_wind_prescriptions = np.array([4])
-    model_wind_multipliers = np.array([1,2,5,7.5,10,25,50,75,100])
+    model_wind_prescriptions = np.array([1,4])
+    model_wind_multipliers_MS = np.array([1])
+    model_wind_multipliers_GB = np.array([1])
+    model_wind_multipliers_AGB = np.array([1,10])
+    model_wind_multipliers_WR = np.array([1])
+    model_wind_multipliers_LBV = np.array([1,10])
+    model_twin_fractions = np.array([0,0.5,1])
     modelstrings = []
 
     for bh_prescription in model_bh_prescriptions:
         for wind_prescription in model_wind_prescriptions:
-            for wind_multiplier in model_wind_multipliers:
-                if wind_multiplier.is_integer():
-                    wind_multiplier = int(wind_multiplier)
-                modelstring = f'{bh_prescription}_{wind_prescription}_{wind_multiplier}_{wind_multiplier}' # singlewind format
-                modelstrings.append(modelstring)
+            for wind_multiplier_MS in model_wind_multipliers_MS:
+                for wind_multiplier_GB in model_wind_multipliers_GB:
+                    for wind_multiplier_AGB in model_wind_multipliers_AGB:
+                        for wind_multiplier_WR in model_wind_multipliers_WR:
+                            for wind_multiplier_LBV in model_wind_multipliers_LBV:
+                                for twin_fraction in model_twin_fractions:
+                                    if wind_multiplier_MS.is_integer():
+                                        wind_multiplier_MS = int(wind_multiplier_MS)
+                                    if wind_multiplier_GB.is_integer():
+                                        wind_multiplier_GB = int(wind_multiplier_GB)
+                                    if wind_multiplier_AGB.is_integer():
+                                        wind_multiplier_AGB = int(wind_multiplier_AGB)
+                                    if wind_multiplier_WR.is_integer():
+                                        wind_multiplier_WR = int(wind_multiplier_WR)
+                                    if wind_multiplier_LBV.is_integer():
+                                        wind_multiplier_LBV = int(wind_multiplier_LBV)
+                                    if twin_fraction.is_integer():
+                                        twin_fraction = int(twin_fraction)
+                                    modelstring = f'{bh_prescription}_{wind_prescription}_{wind_multiplier_MS}_{wind_multiplier_GB}_{wind_multiplier_AGB}_{wind_multiplier_WR}_{wind_multiplier_LBV}_{twin_fraction}'
+                                    modelstrings.append(modelstring)
 
     all_models_Lx_per_SFR = np.zeros((len(modelstrings), len(model_metallicities))) # each row is a model, each column is a metallicity
 
@@ -455,42 +475,31 @@ if plot_models:
         this_model_Lx_per_SFR = np.zeros_like(model_metallicities)
         for Z_index, Z in enumerate(model_metallicities):
             # find the file for this model and metallicity
-            redshift_evolution_data_file = f'../auto_xrb_pipeline/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring}_{imfstring}_100myr.mat'
-            redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-            Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-            # integrate over columns corresponding to 0.5-8 keV to get Lx/SFR in erg/s/(Msun/yr)
-            Lx_per_SFR_data = np.trapz(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-            # extract low z value and store
-            Lx_per_SFR_zlow = Lx_per_SFR_data[-1] # runs from high z to low z
-            print(Lx_per_SFR_zlow)
-            this_model_Lx_per_SFR[Z_index] = Lx_per_SFR_zlow
-
-            all_models_Lx_per_SFR[modelstring_index, Z_index] = Lx_per_SFR_zlow
+            try:
+                redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring}_{imfstring}_100myr.mat'
+                redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
+                Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
+                # integrate over columns corresponding to 0.5-8 keV to get Lx/SFR in erg/s/(Msun/yr)
+                Lx_per_SFR_data = np.trapezoid(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
+                # extract low z value and store
+                Lx_per_SFR_zlow = Lx_per_SFR_data[-1] # runs from high z to low z
+                print(Lx_per_SFR_zlow)
+                this_model_Lx_per_SFR[Z_index] = Lx_per_SFR_zlow
+                all_models_Lx_per_SFR[modelstring_index, Z_index] = Lx_per_SFR_zlow
+            except:
+                print(f'File not found for model {modelstring} and Z {Z}, skipping...')
+                this_model_Lx_per_SFR[Z_index] = np.nan
+                all_models_Lx_per_SFR[modelstring_index, Z_index] = np.nan
 
     # add incomplete models here for comparison
-    redshift_evolution_data_file = '../auto_xrb_pipeline/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_2_4_0.001_0.001_PL-0.1-100-2.35_100myr.mat'
-    redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-    Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-    Lx_per_SFR_data = np.trapz(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-    Lx_per_SFR_zlow_suppwind = Lx_per_SFR_data[-1] # runs from high z to low z
 
-    redshift_evolution_data_file = '../auto_xrb_pipeline/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_0_4_0.001_0.001_PL-0.1-100-2.35_100myr.mat'
+    '''
+    redshift_evolution_data_file = '../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_2_1_100_100_PL-0.1-100-2.35_100myr.mat'
     redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
     Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-    Lx_per_SFR_data = np.trapz(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-    Lx_per_SFR_zlow_suppwind_bh0 = Lx_per_SFR_data[-1] # runs from high z to low z
-
-    redshift_evolution_data_file = '../auto_xrb_pipeline/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_2_1_1_1_PL-0.1-100-2.35_100myr.mat'
-    redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-    Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-    Lx_per_SFR_data = np.trapz(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-    Lx_per_SFR_zlow_wind1 = Lx_per_SFR_data[-1] # runs from high z to low z
-
-    redshift_evolution_data_file = '../auto_xrb_pipeline/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_2_1_100_100_PL-0.1-100-2.35_100myr.mat'
-    redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-    Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-    Lx_per_SFR_data = np.trapz(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
+    Lx_per_SFR_data = np.trapezoid(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
     Lx_per_SFR_zlow_wind1_boosted = Lx_per_SFR_data[-1] # runs from high z to low z
+    '''
 
     # repeat constraints plot but now with model predictions overplotted
 
@@ -510,17 +519,23 @@ if plot_models:
 
     all_log_Z_model = np.log10(model_metallicities)
     for modelstring_index, modelstring in enumerate(modelstrings):
+        # if model doesn't exist (nan value) for all metallicities, skip plotting it
+        if np.isnan(all_models_Lx_per_SFR[modelstring_index]).all():
+            continue
         log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
-        plt.plot(all_log_Z_model, log_Lx_per_SFR_model, '-', label=modelstring)
-    plt.plot(np.log10(0.016), np.log10(Lx_per_SFR_zlow_suppwind), 'x', label='2_4_0.001_0.001')
-    plt.plot(np.log10(0.016), np.log10(Lx_per_SFR_zlow_suppwind_bh0), 'x', label='0_4_0.001_0.001')
-    plt.plot(np.log10(0.016), np.log10(Lx_per_SFR_zlow_wind1), 'x', label='2_1_1_1')
+        plt.plot(all_log_Z_model, log_Lx_per_SFR_model, 'o-', label=modelstring)
+    '''
     plt.plot(np.log10(0.016), np.log10(Lx_per_SFR_zlow_wind1_boosted), 'x', label='2_1_100_100')
+    '''
     plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]')
     #plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
     plt.xlabel(r'$\log_{10}Z$')
     plt.ylim(37,43)
     plt.xlim(-3.5,-1.25)
+
+    # Enable ticks and grid
+    plt.tick_params(axis='both', which='both', direction='in', top=True)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
 
     # Place legend outside the plot
     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
