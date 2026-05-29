@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.io as sio
+import scipy.special as sp
 import matplotlib.pyplot as plt
 from glob import glob
 
@@ -14,8 +15,7 @@ Douna objects to check SFR IMFs:
 
 ### Constraints on Lx per SFR at various metallicities for short-lived population (<100myr) ###
 
-IMF = 'Kroupa' # IMF used for SFR estimates in all datasets, so we don't need to convert between different IMFs
-plot_models = True
+IMF = 'Kroupa' # IMF used for SFR estimates in all datasets (corrections applied as needed for conversion)
 salp_to_kr_SFR = 0.67 # from Madau & Dickinson 2014
 kr_to_salp_SFR = 1 / salp_to_kr_SFR
 salp_to_chab_SFR = 0.63 # from Madau & Dickinson 2014
@@ -377,13 +377,6 @@ for data_classifier in np.unique(all_data_classifiers):
                  capsize=5*plot_errorbars[data_classifier],
                  label=labels[data_classifier])
 
-# Plot PS constraint from Fragos 2013
-fragos_data = np.genfromtxt('./fragos_13.txt')
-fragos_12_plus_log_O_H = fragos_data[:,0]
-fragos_log_Lx_per_SFR = fragos_data[:,1]
-fragos_log_Z = fragos_12_plus_log_O_H - 8.69 + np.log10(0.0142)
-plt.plot(fragos_log_Z, fragos_log_Lx_per_SFR, color='teal', linestyle='--', label='F13(PS)')
-
 plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]')
 #plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
 plt.xlabel(r'$\log_{10}Z$')
@@ -400,145 +393,280 @@ plt.show()
 ### likelihood for each. for Lx/SFR we use Jiten's asymmetric gaussian likelihood in log10 of Lx/SFR (eq 34 in Dhandha et al. 2024a)
 ### later we will introduce a likelihood for the predicted/measured metallicity of the galaxies in the sample as well
 
-if plot_models:
-    def Lx_per_SFR_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean, log_Lx_per_SFR_max, log_Lx_per_SFR_min):
-        # asymmetric gaussian likelihood in log10 of Lx/SFR (eq 34 in Dhandha et al. 2024a)
-        sigma_model = 0.2 * log_Lx_per_SFR_pred # ad-hoc model uncertainty of 20% of simulated value
-        sigma_upper = log_Lx_per_SFR_max - log_Lx_per_SFR_mean
-        sigma_lower = log_Lx_per_SFR_mean - log_Lx_per_SFR_min
-        if log_Lx_per_SFR_pred > log_Lx_per_SFR_mean:
-            sigma_total = np.sqrt(sigma_model**2 + sigma_upper**2)
-        else:
-            sigma_total = np.sqrt(sigma_model**2 + sigma_lower**2)
-        return np.exp(-0.5 * ((log_Lx_per_SFR_pred - log_Lx_per_SFR_mean) / sigma_total)**2)
+# import Lx/SFR simulations for all models and extract z=0 values. interpolate over metallicity to get Lx/SFR against metallicity for each model.
+# plot these against metallicity over the observations to have a look
+imfstring = 'PL-0.1-100-2.35'
+KeV_to_Hz = 2.417990504024e17
+freq_lower_cutoff = 0.5*KeV_to_Hz
+freq_upper_cutoff = 8.0*KeV_to_Hz
+yr_to_s = 3.16e7
+J_to_erg = 1e7
 
-    # import Lx/SFR simulations for all models and extract z=0 values. interpolate over metallicity to get Lx/SFR against metallicity for each model.
-    # plot these against metallicity over the observations to have a look
-    imfstring = 'Kr3-canonical-2.7-100'
-    bf = 0.5
-    KeV_to_Hz = 2.417990504024e17
-    freq_lower_cutoff = 0.5*KeV_to_Hz
-    freq_upper_cutoff = 8.0*KeV_to_Hz
-    yr_to_s = 3.16e7
-    J_to_erg = 1e7
+freq_bin_indices = [100, 200, 300, 350, 360, 364, 367, 370, 373, 376,
+                    379, 382, 385, 388, 391, 394, 397, 400, 403, 406,
+                    409, 412, 415, 418, 421, 424, 427, 430, 433, 436,
+                    439, 442, 445, 448, 451, 454, 457, 460, 463, 466,
+                    469, 472, 475, 478, 481, 485, 490, 500, 600, 700]
 
-    freq_bin_indices = [100, 200, 300, 350, 360, 364, 367, 370, 373, 376,
-                        379, 382, 385, 388, 391, 394, 397, 400, 403, 406,
-                        409, 412, 415, 418, 421, 424, 427, 430, 433, 436,
-                        439, 442, 445, 448, 451, 454, 457, 460, 463, 466,
-                        469, 472, 475, 478, 481, 485, 490, 500, 600, 700]
+energy_data = np.loadtxt('./fine_freqs.txt') * 4.135665538536e-18  # Convert Hz to keV
+energy_data = energy_data[freq_bin_indices]
+freq_data = energy_data * KeV_to_Hz
 
-    energy_data = np.loadtxt('./fine_freqs.txt') * 4.135665538536e-18  # Convert Hz to keV
-    energy_data = energy_data[freq_bin_indices]
-    freq_data = energy_data * KeV_to_Hz
+integration_band = np.bitwise_and(freq_data >= freq_lower_cutoff, freq_data <= freq_upper_cutoff)
 
-    integration_band = np.bitwise_and(freq_data >= freq_lower_cutoff, freq_data <= freq_upper_cutoff)
+model_metallicities = np.array([0.00056,0.0018,0.005,0.008,0.016]) # absolute Z
+all_log_Z_model = np.log10(model_metallicities)
+model_bh_prescriptions = np.array([2])
+model_wind_prescriptions = np.array([1])
+model_wind_multipliers_MS = np.array([1])
+model_wind_multipliers_GB = np.array([1])
+model_wind_multipliers_AGB = np.array([0.1,1,10])
+model_wind_multipliers_WR = np.array([1])
+model_wind_multipliers_LBV = np.array([0.1,1,10])
+model_twin_fractions = np.array([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0])
+model_alphas_ce = np.array([0.2,1])
+model_bfs = np.array([0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.0]) # not used in modelstring but used later to scale for plotting
+#model_bfs = np.array([0.5])
+modelstrings = []
+modelstrings_no_bf = []
 
-    model_metallicities = np.array([0.00056, 0.0018, 0.005, 0.008, 0.016]) # absolute Z
-    model_bh_prescriptions = np.array([2])
-    model_wind_prescriptions = np.array([1,4])
-    model_wind_multipliers_MS = np.array([1])
-    model_wind_multipliers_GB = np.array([1])
-    model_wind_multipliers_AGB = np.array([1,10])
-    model_wind_multipliers_WR = np.array([1])
-    model_wind_multipliers_LBV = np.array([1,10])
-    model_twin_fractions = np.array([0,0.5,1])
-    modelstrings = []
 
-    for bh_prescription in model_bh_prescriptions:
-        for wind_prescription in model_wind_prescriptions:
-            for wind_multiplier_MS in model_wind_multipliers_MS:
-                for wind_multiplier_GB in model_wind_multipliers_GB:
-                    for wind_multiplier_AGB in model_wind_multipliers_AGB:
-                        for wind_multiplier_WR in model_wind_multipliers_WR:
-                            for wind_multiplier_LBV in model_wind_multipliers_LBV:
+for bh_prescription in model_bh_prescriptions:
+    for wind_prescription in model_wind_prescriptions:
+        for wind_multiplier_MS in model_wind_multipliers_MS:
+            for wind_multiplier_GB in model_wind_multipliers_GB:
+                for wind_multiplier_AGB in model_wind_multipliers_AGB:
+                    for wind_multiplier_WR in model_wind_multipliers_WR:
+                        for wind_multiplier_LBV in model_wind_multipliers_LBV:
+                            for alpha_ce in model_alphas_ce:
                                 for twin_fraction in model_twin_fractions:
-                                    if wind_multiplier_MS.is_integer():
-                                        wind_multiplier_MS = int(wind_multiplier_MS)
-                                    if wind_multiplier_GB.is_integer():
-                                        wind_multiplier_GB = int(wind_multiplier_GB)
-                                    if wind_multiplier_AGB.is_integer():
-                                        wind_multiplier_AGB = int(wind_multiplier_AGB)
-                                    if wind_multiplier_WR.is_integer():
-                                        wind_multiplier_WR = int(wind_multiplier_WR)
-                                    if wind_multiplier_LBV.is_integer():
-                                        wind_multiplier_LBV = int(wind_multiplier_LBV)
-                                    if twin_fraction.is_integer():
-                                        twin_fraction = int(twin_fraction)
-                                    modelstring = f'{bh_prescription}_{wind_prescription}_{wind_multiplier_MS}_{wind_multiplier_GB}_{wind_multiplier_AGB}_{wind_multiplier_WR}_{wind_multiplier_LBV}_{twin_fraction}'
-                                    modelstrings.append(modelstring)
+                                    for bf in model_bfs:
+                                    
+                                        if wind_multiplier_MS.is_integer():
+                                            wind_multiplier_MS = int(wind_multiplier_MS)
+                                        if wind_multiplier_GB.is_integer():
+                                            wind_multiplier_GB = int(wind_multiplier_GB)
+                                        if wind_multiplier_AGB.is_integer():
+                                            wind_multiplier_AGB = int(wind_multiplier_AGB)
+                                        if wind_multiplier_WR.is_integer():
+                                            wind_multiplier_WR = int(wind_multiplier_WR)
+                                        if wind_multiplier_LBV.is_integer():
+                                            wind_multiplier_LBV = int(wind_multiplier_LBV)
+                                        if twin_fraction == 0.0:
+                                            twin_fraction = int(twin_fraction)
+                                        if alpha_ce.is_integer():
+                                            alpha_ce = int(alpha_ce)
+                                        modelstring_no_bf = f'{bh_prescription}_{wind_prescription}_{wind_multiplier_MS}_{wind_multiplier_GB}_{wind_multiplier_AGB}_{wind_multiplier_WR}_{wind_multiplier_LBV}_{alpha_ce}_{twin_fraction}'
+                                        modelstrings_no_bf.append(modelstring_no_bf) # will have duplicates since bf not included but this is by design
+                                        modelstring = f'{modelstring_no_bf}_{bf}'
+                                        modelstrings.append(modelstring)
 
-    all_models_Lx_per_SFR = np.zeros((len(modelstrings), len(model_metallicities))) # each row is a model, each column is a metallicity
+all_models_Lx_per_SFR = np.zeros((len(modelstrings), len(model_metallicities))) # each row is a model, each column is a metallicity
+print(f'Number of models: {len(modelstrings)}') # doesn't include metallicity in count
 
-    for modelstring_index, modelstring in enumerate(modelstrings):
-        print(f'Processing model {modelstring}...')
-        this_model_Lx_per_SFR = np.zeros_like(model_metallicities)
-        for Z_index, Z in enumerate(model_metallicities):
-            # find the file for this model and metallicity
-            try:
-                redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring}_{imfstring}_100myr.mat'
-                redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-                Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-                # integrate over columns corresponding to 0.5-8 keV to get Lx/SFR in erg/s/(Msun/yr)
-                Lx_per_SFR_data = np.trapezoid(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-                # extract low z value and store
-                Lx_per_SFR_zlow = Lx_per_SFR_data[-1] # runs from high z to low z
-                print(Lx_per_SFR_zlow)
-                this_model_Lx_per_SFR[Z_index] = Lx_per_SFR_zlow
-                all_models_Lx_per_SFR[modelstring_index, Z_index] = Lx_per_SFR_zlow
-            except:
-                print(f'File not found for model {modelstring} and Z {Z}, skipping...')
-                this_model_Lx_per_SFR[Z_index] = np.nan
-                all_models_Lx_per_SFR[modelstring_index, Z_index] = np.nan
+for modelstring_index, modelstring in enumerate(modelstrings):
+    modelstring_no_bf = modelstrings_no_bf[modelstring_index] # corresponding modelstring without bf, for finding the file since data stored assuming bf=1
+    bf = np.float64(modelstring.split('_')[-1])
+    print(f'Processing model {modelstring}...')
+    this_model_Lx_per_SFR = np.zeros_like(model_metallicities)
+    for Z_index, Z in enumerate(model_metallicities):
+        # find the file for this model and metallicity
+        try:
+            redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring_no_bf}_{imfstring}_100myr.mat' # bf not contained in filename because data stored assuming bf=1
+            redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
+        except:
+            print(f'File not found for model {modelstring_no_bf} and Z {Z}, skipping...')
+            this_model_Lx_per_SFR[Z_index] = np.nan
+            all_models_Lx_per_SFR[modelstring_index, Z_index] = np.nan
+        else:
+            Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
+            # integrate over columns corresponding to 0.5-8 keV to get Lx/SFR in erg/s/(Msun/yr)
+            Lx_per_SFR_data = np.trapezoid(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
+            # extract low z value and store
+            Lx_per_SFR_zlow = Lx_per_SFR_data[-1] # runs from high z to low z
+            #print(Lx_per_SFR_zlow)
+            this_model_Lx_per_SFR[Z_index] = Lx_per_SFR_zlow
+            all_models_Lx_per_SFR[modelstring_index, Z_index] = Lx_per_SFR_zlow
 
-    # add incomplete models here for comparison
+### inference time
 
-    '''
-    redshift_evolution_data_file = '../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_0.016_2_1_100_100_PL-0.1-100-2.35_100myr.mat'
-    redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
-    Lnu_per_SFR_data = 2*np.pi*redshift_evolution_data['Lnu_per_SFR_data_attenuated'].T*J_to_erg*bf # erg/s/Hz/(Msun/yr)
-    Lx_per_SFR_data = np.trapezoid(Lnu_per_SFR_data[:,integration_band]*freq_data[integration_band], x=np.log(freq_data[integration_band])) # one value for each redshift
-    Lx_per_SFR_zlow_wind1_boosted = Lx_per_SFR_data[-1] # runs from high z to low z
-    '''
+data_classifiers_to_use_in_inference = [1,2,3,4,5,6,7,8,9] 
 
-    # repeat constraints plot but now with model predictions overplotted
+def asym_gauss_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean, log_Lx_per_SFR_max, log_Lx_per_SFR_min):
+    # asymmetric gaussian likelihood in log10 of Lx/SFR (eq 34 in Dhandha et al. 2024a), used for the detections with error bars.
+    sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
+    sigma_upper = log_Lx_per_SFR_max - log_Lx_per_SFR_mean
+    sigma_lower = log_Lx_per_SFR_mean - log_Lx_per_SFR_min
+    if log_Lx_per_SFR_pred > log_Lx_per_SFR_mean:
+        sigma_total = np.sqrt(sigma_model**2 + sigma_upper**2)
+    else:
+        sigma_total = np.sqrt(sigma_model**2 + sigma_lower**2)
+    return np.exp(-0.5 * ((log_Lx_per_SFR_pred - log_Lx_per_SFR_mean) / sigma_total)**2)
 
-    plt.figure()
-    for data_classifier in np.unique(all_data_classifiers):
-        mask = all_data_classifiers == data_classifier
-        plt.errorbar(all_log_Z[mask], 
-                    all_log_Lx_per_SFR_mean[mask], 
-                    yerr=[all_log_Lx_per_SFR_mean[mask] - all_log_Lx_per_SFR_min[mask], 
-                    all_log_Lx_per_SFR_max[mask] - all_log_Lx_per_SFR_mean[mask]], 
-                    fmt=marker_styles[data_classifier], 
-                    ecolor=marker_colors[data_classifier],
-                    c=marker_colors[data_classifier],
-                    markersize=marker_sizes[data_classifier], 
-                    capsize=5*plot_errorbars[data_classifier],
-                    label=labels[data_classifier])
+def upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_upperlim):
+    # likelihood for upper limits using error function. L21 says D15 upper limits are 84% (1sigma) upper limits so we take the upper limit itself as the measurement part of the error.
+    sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
+    erf_numerator = log_Lx_per_SFR_upperlim - log_Lx_per_SFR_pred
+    erf_denominator = np.sqrt(2 * (sigma_model**2 + log_Lx_per_SFR_upperlim**2))
+    return 0.5 * (1 + sp.erf(erf_numerator / erf_denominator))
 
-    all_log_Z_model = np.log10(model_metallicities)
-    for modelstring_index, modelstring in enumerate(modelstrings):
-        # if model doesn't exist (nan value) for all metallicities, skip plotting it
-        if np.isnan(all_models_Lx_per_SFR[modelstring_index]).all():
-            continue
-        log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
-        plt.plot(all_log_Z_model, log_Lx_per_SFR_model, 'o-', label=modelstring)
-    '''
-    plt.plot(np.log10(0.016), np.log10(Lx_per_SFR_zlow_wind1_boosted), 'x', label='2_1_100_100')
-    '''
-    plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]')
-    #plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
-    plt.xlabel(r'$\log_{10}Z$')
-    plt.ylim(37,43)
-    plt.xlim(-3.5,-1.25)
+'''
+def upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_upperlim):
+    # same as previous but instead we interpret upper limits as non-detections (measured value = 0) with an error bar equal to the upper limit
+    # use gaussian likelihood in log space
+    sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
+    sigma_total = np.sqrt(sigma_model**2 + log_Lx_per_SFR_upperlim**2)
+    return np.exp(-0.5 * ((log_Lx_per_SFR_pred - 0) / sigma_total)**2)
+'''
+    
+# calculate likelihood for each model against each data point
+# model not calculated at the same metallicities of each data point so we interpolate the model predictions to the metallicity of each data point for likelihood calculation
 
-    # Enable ticks and grid
-    plt.tick_params(axis='both', which='both', direction='in', top=True)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+# get the observational data points we want to use in inference
+infmask = np.isin(all_data_classifiers, data_classifiers_to_use_in_inference)
+all_log_Lx_per_SFR_mean_masked = all_log_Lx_per_SFR_mean[infmask]
+all_log_Lx_per_SFR_max_masked = all_log_Lx_per_SFR_max[infmask]
+all_log_Lx_per_SFR_min_masked = all_log_Lx_per_SFR_min[infmask]
+all_log_Z_masked = all_log_Z[infmask]
+all_data_classifiers_masked = all_data_classifiers[infmask]
 
-    # Place legend outside the plot
-    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+#additional mask to remove data points with metallicity outside the range of the models, since we can't calculate likelihood for those
+model_metallicity_min = np.min(all_log_Z_model)
+model_metallicity_max = np.max(all_log_Z_model)
+metallicity_mask = np.bitwise_and(all_log_Z_masked >= model_metallicity_min, all_log_Z_masked <= model_metallicity_max)
+all_log_Lx_per_SFR_mean_masked_truncated = all_log_Lx_per_SFR_mean_masked[metallicity_mask]
+all_log_Lx_per_SFR_max_masked_truncated = all_log_Lx_per_SFR_max_masked[metallicity_mask]
+all_log_Lx_per_SFR_min_masked_truncated = all_log_Lx_per_SFR_min_masked[metallicity_mask]
+all_log_Z_masked_truncated = all_log_Z_masked[metallicity_mask]
+all_data_classifiers_masked_truncated = all_data_classifiers_masked[metallicity_mask]
 
-    plt.savefig(f'./Lx_per_SFR_constraints_with_models.pdf', dpi=300, bbox_inches='tight')
-    #plt.show()
+model_likelihoods = np.zeros((len(modelstrings), len(all_log_Z_masked_truncated))) # each row is a model, each column is a data point
+
+for modelstring_index, modelstring in enumerate(modelstrings):
+    log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
+    for data_index in range(len(all_log_Z_masked_truncated)):
+        log_Lx_per_SFR_mean = all_log_Lx_per_SFR_mean_masked_truncated[data_index]
+        log_Lx_per_SFR_max = all_log_Lx_per_SFR_max_masked_truncated[data_index]
+        log_Lx_per_SFR_min = all_log_Lx_per_SFR_min_masked_truncated[data_index]
+        log_Z = all_log_Z_masked_truncated[data_index]
+        data_classifier = all_data_classifiers_masked_truncated[data_index]
+        # interpolate model prediction to metallicity of this data point
+        log_Lx_per_SFR_pred = np.interp(log_Z, all_log_Z_model, log_Lx_per_SFR_model)
+        if data_classifier in [1,2,4,5,6,7,9]: # detections with error bars
+            likelihood = asym_gauss_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean, log_Lx_per_SFR_max, log_Lx_per_SFR_min)
+        elif data_classifier in [3,8]: # upper limits without error bars
+            likelihood = upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean) # use mean as upper limit since no error bars
+        else:
+            raise ValueError(f'Unknown data classifier {data_classifier}')
+        model_likelihoods[modelstring_index, data_index] = likelihood
+
+# now we have likelihoods for each model against each data point, we can calculate total likelihood for each model by multiplying over data points (assuming independence)
+total_model_likelihoods = np.prod(model_likelihoods, axis=1)
+
+# rank models by likelihood and print the top 100 and bottom 100
+model_ranking_indices = np.argsort(total_model_likelihoods)[::-1] # sort in descending order
+for rank, model_index in enumerate(model_ranking_indices):
+    if rank < 100 or rank >= len(model_ranking_indices) - 100:
+        print(f'Rank {rank+1}: Model {modelstrings[model_index]} with likelihood {total_model_likelihoods[model_index]}')
+
+# print Lx/SFR against Z for top 5 models
+print('Lx/SFR against Z for top 5 models:')
+for rank in range(5):
+    model_index = model_ranking_indices[rank]
+    print(f'Rank {rank+1}: Model {modelstrings[model_index]}')
+    log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[model_index])
+    for Z, log_Lx_per_SFR in zip(all_log_Z_model, log_Lx_per_SFR_model):
+        print(f'Z: {Z}, log_Lx/SFR: {log_Lx_per_SFR}')
+
+# get fragos data and calculate its likelihood with respect to the data
+fragos_data = np.genfromtxt('./fragos_13.txt')
+fragos_12_plus_log_O_H = fragos_data[:,0]
+fragos_log_Lx_per_SFR = fragos_data[:,1]
+fragos_log_Z = fragos_12_plus_log_O_H - 8.69 + np.log10(0.0142)
+fragos_at_data_Z = np.interp(all_log_Z_masked, fragos_log_Z, fragos_log_Lx_per_SFR) # don't use truncated masked since fragos data covers full metallicity range, so we can calculate likelihood for all data points
+fragos_likelihoods = np.zeros(len(all_log_Z_masked))
+for data_index in range(len(all_log_Z_masked)):
+    log_Lx_per_SFR_pred = fragos_at_data_Z[data_index]
+    log_Lx_per_SFR_mean = all_log_Lx_per_SFR_mean_masked[data_index]
+    log_Lx_per_SFR_max = all_log_Lx_per_SFR_max_masked[data_index]
+    log_Lx_per_SFR_min = all_log_Lx_per_SFR_min_masked[data_index]
+    data_classifier = all_data_classifiers_masked[data_index]
+    if data_classifier in [1,2,4,5,6,7,9]: # detections with error bars
+        likelihood = asym_gauss_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean, log_Lx_per_SFR_max, log_Lx_per_SFR_min)
+    elif data_classifier in [3,8]: # upper limits without error bars
+        likelihood = upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean) # use mean as upper limit since no error bars
+    else:
+        raise ValueError(f'Unknown data classifier {data_classifier}')
+    fragos_likelihoods[data_index] = likelihood
+total_fragos_likelihood = np.prod(fragos_likelihoods)
+print(f'Fragos 2013 model likelihood: {total_fragos_likelihood}')
+
+# plot distribution of likelihoods
+
+logL_over_Lmax = np.log10(total_model_likelihoods / np.max(total_model_likelihoods))
+plt.figure()
+plt.hist(logL_over_Lmax, bins=100)
+# vertical line at likelihood of Fragos 2013 model
+logL_fragos_over_Lmax = np.log10(total_fragos_likelihood / np.max(total_model_likelihoods))
+plt.axvline(logL_fragos_over_Lmax, color='cyan', linestyle='--', label='F13(PS)')
+plt.legend()
+plt.xlabel(r'$\log_{10}(L/L_{max})$')
+plt.ylabel('Number of models')
+plt.savefig(f'./likelihood_distribution.pdf', dpi=300, bbox_inches='tight')
+plt.show()
+
+# repeat constraints plot but now with model predictions overplotted
+# for datasets not used in inference, add opacity to the points to indicate they were not used
+
+plt.figure()
+for data_classifier in np.unique(all_data_classifiers):
+    opacity = 1.0 if data_classifier in data_classifiers_to_use_in_inference else 0.3
+    mask = all_data_classifiers == data_classifier
+    plt.errorbar(all_log_Z[mask], 
+                all_log_Lx_per_SFR_mean[mask], 
+                yerr=[all_log_Lx_per_SFR_mean[mask] - all_log_Lx_per_SFR_min[mask], 
+                all_log_Lx_per_SFR_max[mask] - all_log_Lx_per_SFR_mean[mask]], 
+                fmt=marker_styles[data_classifier], 
+                ecolor=marker_colors[data_classifier],
+                c=marker_colors[data_classifier],
+                markersize=marker_sizes[data_classifier], 
+                capsize=5*plot_errorbars[data_classifier],
+                label=labels[data_classifier],
+                zorder=10,
+                alpha=opacity)
+
+for modelstring_index, modelstring in enumerate(modelstrings):
+    # if model doesn't exist (nan value) for all metallicities, skip plotting it
+    if np.isnan(all_models_Lx_per_SFR[modelstring_index]).all():
+        continue
+    log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
+    plt.plot(all_log_Z_model, log_Lx_per_SFR_model, color='C0', alpha=0.1)
+
+# take mean of the n highest likelihood models and plot as a thicker line
+n_top_models = 1
+top_model_indices = model_ranking_indices[:n_top_models]
+top_models_Lx_per_SFR = all_models_Lx_per_SFR[top_model_indices]
+top_models_log_Lx_per_SFR = np.log10(top_models_Lx_per_SFR)
+mean_top_models_log_Lx_per_SFR = np.nanmean(top_models_log_Lx_per_SFR, axis=0)
+plt.plot(all_log_Z_model, mean_top_models_log_Lx_per_SFR, color='C1', linewidth=3, label=f'Mean of top {n_top_models} models')
+
+# Plot PS constraint from Fragos 2013
+plt.plot(fragos_log_Z, fragos_log_Lx_per_SFR, color='cyan', linestyle='--', label='F13(PS)')
+
+plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]')
+#plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
+plt.xlabel(r'$\log_{10}Z$')
+plt.ylim(37,43)
+plt.xlim(-3.5,-1.25)
+
+# Enable ticks and grid
+plt.tick_params(axis='both', which='both', direction='in', top=True)
+plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+
+# Place legend outside the plot
+plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+plt.savefig(f'./Lx_per_SFR_constraints_with_models.pdf', dpi=300, bbox_inches='tight')
+#plt.show()
+
+
