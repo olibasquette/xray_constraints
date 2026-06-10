@@ -13,13 +13,58 @@ Douna objects to check SFR IMFs:
 >IIZw 40, Sage 1992 , uses Thronson & Telesco 1986, which assumes Salpeter
 '''
 
+# use LaTeX for plotting
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+})
+
 ### Constraints on Lx per SFR at various metallicities for short-lived population (<100myr) ###
 
-IMF = 'Kroupa' # IMF used for SFR estimates in all datasets (corrections applied as needed for conversion)
+IMF = 'Salpeter' # target IMF used for SFR estimates in all datasets (corrections applied as needed for conversion)
 salp_to_kr_SFR = 0.67 # from Madau & Dickinson 2014
 kr_to_salp_SFR = 1 / salp_to_kr_SFR
 salp_to_chab_SFR = 0.63 # from Madau & Dickinson 2014
 chab_to_salp_SFR = 1 / salp_to_chab_SFR
+salp_to_kw_SFR = 1.45
+kw_to_salp_SFR = 1 / salp_to_kw_SFR
+kr_to_kw_SFR = 2.16
+kw_to_kr_SFR = 1 / kr_to_kw_SFR
+
+_sfr_imf_corrections = {
+    ('Salpeter', 'Kroupa'): salp_to_kr_SFR,
+    ('Kroupa', 'Salpeter'): kr_to_salp_SFR,
+    ('Salpeter', 'Chabrier'): salp_to_chab_SFR,
+    ('Chabrier', 'Salpeter'): chab_to_salp_SFR,
+    ('Kroupa', 'Chabrier'): 1.0, # difference between Kroupa and Chabrier is negligible here
+    ('Chabrier', 'Kroupa'): 1.0,
+    ('Salpeter', 'KroupaWeidner'): salp_to_kw_SFR,
+    ('KroupaWeidner', 'Salpeter'): kw_to_salp_SFR,
+    ('Kroupa', 'KroupaWeidner'): kr_to_kw_SFR,
+    ('KroupaWeidner', 'Kroupa'): kw_to_kr_SFR,
+    ('Chabrier', 'KroupaWeidner'): kr_to_kw_SFR,
+    ('KroupaWeidner', 'Chabrier'): kw_to_kr_SFR,
+}
+
+valid_imfs = {'Salpeter', 'Kroupa', 'Chabrier', 'KroupaWeidner'}
+if IMF not in valid_imfs:
+    raise ValueError(f'Unknown IMF {IMF}. Valid options are {sorted(valid_imfs)}')
+
+def sfr_imf_correction(source_imf, target_imf=IMF):
+    """Multiplicative SFR correction to convert source_imf SFRs to target_imf."""
+    if source_imf == target_imf:
+        return 1.0
+    return _sfr_imf_corrections[(source_imf, target_imf)]
+
+def convert_sfr_imf(sfr, source_imf, target_imf=IMF):
+    return sfr * sfr_imf_correction(source_imf, target_imf)
+
+def convert_log_sfr_imf(log_sfr, source_imf, target_imf=IMF):
+    return log_sfr + np.log10(sfr_imf_correction(source_imf, target_imf))
+
+def convert_log_lx_per_sfr_imf(log_lx_per_sfr, source_imf, target_imf=IMF):
+    return log_lx_per_sfr - np.log10(sfr_imf_correction(source_imf, target_imf))
 
 # rows will be different observations, columns will be logLx_per_SFR_mean, logLx_per_SFR_max, logLx_per_SFR_min, Z_12_plus_log_O_H_mean, dataset_classifier
 all_100myr_constraints = [] 
@@ -41,10 +86,7 @@ logSFR = lehmer2024_galsample[:,15] # Kroupa
 logSFR_mean = np.array([float(x.split('+')[0]) for x in logSFR])
 logSFR_upper_error = np.array([float(x.split('+')[1].split('-')[0]) for x in logSFR])
 logSFR_lower_error = np.array([float(x.split('+')[1].split('-')[1]) for x in logSFR])
-if IMF == 'Salpeter':
-    logSFR_mean = logSFR_mean + np.log10(kr_to_salp_SFR)
-elif IMF == 'Chabrier':
-    logSFR_mean = logSFR_mean + np.log10(chab_to_salp_SFR)
+logSFR_mean = convert_log_sfr_imf(logSFR_mean, 'Kroupa')
 #logSFR_max = logSFR_mean + logSFR_upper_error
 #logSFR_min = logSFR_mean - logSFR_lower_error
 
@@ -89,20 +131,7 @@ Z_12_plus_log_O_H = (lehmer2022_galsample[:,-1]).astype(float)
 mean_Z_12_plus_log_O_H = np.mean(Z_12_plus_log_O_H) # since they're all very similar
 log_Lx_per_SFR = 40.19 # beta; equation 9 in Lehmer 2022, Kroupa
 log_Lx_per_SFR_error = 0.06 # Kroupa
-if IMF == 'Salpeter':
-    log_Lx_per_SFR_uncorrected = log_Lx_per_SFR
-    log_Lx_per_SFR_error_uncorrected = log_Lx_per_SFR_error
-    log_Lx_per_SFR = log_Lx_per_SFR_uncorrected + np.log10(salp_to_kr_SFR) # SFR higher for Salpeter so Lx/SFR lower so use salp_to_kr_SFR (<1)
-    # new error corresponds to same fractional error as before
-    fracerr = log_Lx_per_SFR_error_uncorrected / log_Lx_per_SFR_uncorrected
-    log_Lx_per_SFR_error = fracerr * log_Lx_per_SFR
-elif IMF == 'Chabrier':
-    log_Lx_per_SFR_uncorrected = log_Lx_per_SFR
-    log_Lx_per_SFR_error_uncorrected = log_Lx_per_SFR_error
-    log_Lx_per_SFR = log_Lx_per_SFR + np.log10(salp_to_chab_SFR) # SFR higher for Chabrier so Lx/SFR lower so use salp_to_chab_SFR (<1)
-    # new error corresponds to same fractional error as before
-    fracerr = log_Lx_per_SFR_error_uncorrected / log_Lx_per_SFR_uncorrected
-    log_Lx_per_SFR_error = fracerr * log_Lx_per_SFR
+log_Lx_per_SFR = convert_log_lx_per_sfr_imf(log_Lx_per_SFR, 'Kroupa')
 log_Lx_per_SFR_max = log_Lx_per_SFR + log_Lx_per_SFR_error
 log_Lx_per_SFR_min = log_Lx_per_SFR - log_Lx_per_SFR_error
 
@@ -117,10 +146,7 @@ lehmer2021_supp_galsample_upperlims = np.genfromtxt('./lehmer2021_gal_sample_sup
 Z_12_plus_log_O_H = (lehmer2021_supp_galsample_upperlims[:,14]).astype(float)
 logLx = (lehmer2021_supp_galsample_upperlims[:,17]).astype(float)
 starSFR = (lehmer2021_supp_galsample_upperlims[:,13]).astype(float) # Kroupa
-if IMF == 'Salpeter':
-    starSFR = starSFR.astype(float) * kr_to_salp_SFR
-elif IMF == 'Chabrier':
-    pass # Kroupa and Chabrier difference is negligible
+starSFR = convert_sfr_imf(starSFR, 'Kroupa')
 log_Lx_per_SFR = logLx - np.log10(starSFR)
 
 # these are 1sigma upper limits derived from non-detections of X-ray point sources, so the uncertainty is just the upper limit value itself
@@ -138,10 +164,7 @@ Z_12_plus_log_O_H = (lehmer2021_supp_galsample_detections[:,14]).astype(float)
 logLx = (lehmer2021_supp_galsample_detections[:,21]).astype(float)
 logLth = (lehmer2021_supp_galsample_detections[:,17]).astype(float)
 starSFR = (lehmer2021_supp_galsample_detections[:,13]).astype(float)
-if IMF == 'Salpeter':
-    starSFR = starSFR.astype(float) * salp_to_kr_SFR
-elif IMF == 'Chabrier':
-    starSFR = starSFR.astype(float) * salp_to_chab_SFR
+starSFR = convert_sfr_imf(starSFR, 'Kroupa')
 
 log_Lx_per_SFR = logLx - np.log10(starSFR)
 log_Lth_per_SFR = logLth - np.log10(starSFR)
@@ -178,12 +201,9 @@ log_Lx_per_SFR_min_wrongband = log_Lx_per_SFR_mean_wrongband - log_Lx_per_SFR_er
 log_Lx_per_SFR_mean = log_Lx_per_SFR_mean_wrongband + np.log10(1.56)
 log_Lx_per_SFR_max = log_Lx_per_SFR_max_wrongband + np.log10(1.56)
 log_Lx_per_SFR_min = log_Lx_per_SFR_min_wrongband + np.log10(1.56)
-if IMF == 'Salpeter':
-    log_Lx_per_SFR_mean = log_Lx_per_SFR_mean + np.log10(salp_to_chab_SFR) # SFR higher for Salpeter so Lx/SFR lower so use salp_to_chab_SFR (<1)
-    log_Lx_per_SFR_max = log_Lx_per_SFR_max + np.log10(salp_to_chab_SFR)
-    log_Lx_per_SFR_min = log_Lx_per_SFR_min + np.log10(salp_to_chab_SFR)
-elif IMF == 'Kroupa':
-    pass # difference between Kroupa and Chabrier negligible
+log_Lx_per_SFR_mean = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_mean, 'Chabrier')
+log_Lx_per_SFR_max = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_max, 'Chabrier')
+log_Lx_per_SFR_min = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_min, 'Chabrier')
 
 # add to constraints list with data_classifier = 5 for Fornasini 2020
 data_classifiers = np.ones_like(Z_12_plus_log_O_H) * 5
@@ -207,14 +227,9 @@ v2_SFR = brorby2016_data[:,3] # in M_sun/yr (M12 SFRs, adopted by rest of paper 
 log_Lx_per_SFR_mean = log_Lx_mean - np.log10(v2_SFR)
 log_Lx_per_SFR_max = log_Lx_max - np.log10(v2_SFR)
 log_Lx_per_SFR_min = log_Lx_min - np.log10(v2_SFR)
-if IMF == 'Kroupa':
-    log_Lx_per_SFR_mean = log_Lx_per_SFR_mean + np.log10(kr_to_salp_SFR) # SFR lower for Kroupa so Lx/SFR higher so use kr_to_salp_SFR (>1)
-    log_Lx_per_SFR_max = log_Lx_per_SFR_max + np.log10(kr_to_salp_SFR)
-    log_Lx_per_SFR_min = log_Lx_per_SFR_min + np.log10(kr_to_salp_SFR)
-elif IMF == 'Chabrier':
-    log_Lx_per_SFR_mean = log_Lx_per_SFR_mean + np.log10(chab_to_salp_SFR) # SFR lower for Chabrier so Lx/SFR higher so use chab_to_salp_SFR (>1)
-    log_Lx_per_SFR_max = log_Lx_per_SFR_max + np.log10(chab_to_salp_SFR)
-    log_Lx_per_SFR_min = log_Lx_per_SFR_min + np.log10(chab_to_salp_SFR)
+log_Lx_per_SFR_mean = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_mean, 'Salpeter')
+log_Lx_per_SFR_max = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_max, 'Salpeter')
+log_Lx_per_SFR_min = convert_log_lx_per_sfr_imf(log_Lx_per_SFR_min, 'Salpeter')
 
 # add to constraints list with data_classifier = 6 for Brorby 2016
 data_classifiers = np.ones_like(Z_12_plus_log_O_H) * 6
@@ -225,10 +240,7 @@ all_100myr_constraints.append(np.column_stack((log_Lx_per_SFR_mean, log_Lx_per_S
 
 logMstar = 10.65 # https://iopscience.iop.org/article/10.1088/0004-637X/774/2/152
 star_SFR = 38.0 # in M_sun/yr
-if IMF == 'Salpeter':
-    star_SFR = star_SFR * kr_to_salp_SFR
-elif IMF == 'Chabrier':
-    star_SFR = star_SFR * chab_to_salp_SFR
+star_SFR = convert_sfr_imf(star_SFR, 'Kroupa')
 Z_12_plus_log_O_H = 8.4
 log_Lx_mean = 41.50
 log_Lx_error = 0.02
@@ -248,10 +260,7 @@ all_100myr_constraints.append(np.array([[log_Lx_per_SFR_mean, log_Lx_per_SFR_max
 douna2015_data_upperlims = np.genfromtxt('./douna2015_upperlimits.txt')
 Z_12_plus_log_O_H = douna2015_data_upperlims[:,1].astype(float)
 star_SFR = douna2015_data_upperlims[:,2].astype(float)
-if IMF == 'Kroupa':
-    star_SFR = star_SFR * salp_to_kr_SFR
-elif IMF == 'Chabrier':
-    star_SFR = star_SFR * salp_to_chab_SFR
+star_SFR = convert_sfr_imf(star_SFR, 'Salpeter')
 logLx = douna2015_data_upperlims[:,3].astype(float)
 log_Lx_per_SFR = logLx - np.log10(star_SFR)
 
@@ -268,10 +277,7 @@ all_100myr_constraints.append(np.column_stack((log_Lx_per_SFR, log_Lx_per_SFR, l
 douna2015_data_detections = np.genfromtxt('./douna2015_detections.txt')
 Z_12_plus_log_O_H = douna2015_data_detections[:,1].astype(float)
 star_SFR = douna2015_data_detections[:,2].astype(float)
-if IMF == 'Kroupa':
-    star_SFR = star_SFR * salp_to_kr_SFR
-elif IMF == 'Chabrier':
-    star_SFR = star_SFR * salp_to_chab_SFR
+star_SFR = convert_sfr_imf(star_SFR, 'Salpeter')
 logLx = douna2015_data_detections[:,3].astype(float)
 logLth = douna2015_data_detections[:,4].astype(float)
 log_Lx_per_SFR = logLx - np.log10(star_SFR)
@@ -351,13 +357,13 @@ plot_errorbars = {
 labels = {
     1: 'L24', # Lehmer 2024
     2: 'L22', # Lehmer 2022
-    3: 'L21thr', # Lehmer 2021 supplemental upper lims
-    4: 'L21det',  # Lehmer 2021 supplemental detections
+    3: 'L21(ND)', # Lehmer 2021 supplemental upper lims
+    4: 'L21(D)',  # Lehmer 2021 supplemental detections
     5: 'F20', # Fornasini 2020
     6: 'B16', # Brorby 2016
     7: 'G20', # Garofali 2020
-    8: 'D15thr',  # Douna 2015 upper limits
-    9: 'D15det'   # Douna 2015 detections
+    8: 'D15(ND)',  # Douna 2015 upper limits
+    9: 'D15(D)'   # Douna 2015 detections
 }
 
 # Convert metallicity in 12 + log(O/H) to log(Z)
@@ -415,6 +421,8 @@ freq_data = energy_data * KeV_to_Hz
 integration_band = np.bitwise_and(freq_data >= freq_lower_cutoff, freq_data <= freq_upper_cutoff)
 
 model_metallicities = np.array([0.00056,0.0018,0.005,0.008,0.016]) # absolute Z
+#model_metallicities = np.array([0.005,0.008,0.016])
+#model_metallicities = np.array([0.00056,0.0018]) # absolute Z
 all_log_Z_model = np.log10(model_metallicities)
 model_bh_prescriptions = np.array([2])
 model_wind_prescriptions = np.array([1])
@@ -423,10 +431,10 @@ model_wind_multipliers_GB = np.array([1])
 model_wind_multipliers_AGB = np.array([0.1,1,10])
 model_wind_multipliers_WR = np.array([1])
 model_wind_multipliers_LBV = np.array([0.1,1,10])
-model_twin_fractions = np.array([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0])
+model_twin_fractions = np.array([0,0.1,0.2,0.3,0.4,0.5])
 model_alphas_ce = np.array([0.2,1])
-model_bfs = np.array([0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.0]) # not used in modelstring but used later to scale for plotting
-#model_bfs = np.array([0.5])
+#model_bfs = np.array([0.2,0.3,0.4,0.5,0.6,0.7,0.8]) # not used in modelstring but used later to scale for plotting
+model_bfs = np.array([0.5]) # not used in modelstring but used later to scale for plotting
 modelstrings = []
 modelstrings_no_bf = []
 
@@ -467,12 +475,12 @@ print(f'Number of models: {len(modelstrings)}') # doesn't include metallicity in
 for modelstring_index, modelstring in enumerate(modelstrings):
     modelstring_no_bf = modelstrings_no_bf[modelstring_index] # corresponding modelstring without bf, for finding the file since data stored assuming bf=1
     bf = np.float64(modelstring.split('_')[-1])
-    print(f'Processing model {modelstring}...')
+    #print(f'Processing model {modelstring}...')
     this_model_Lx_per_SFR = np.zeros_like(model_metallicities)
     for Z_index, Z in enumerate(model_metallicities):
         # find the file for this model and metallicity
         try:
-            redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring_no_bf}_{imfstring}_100myr.mat' # bf not contained in filename because data stored assuming bf=1
+            redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data_60/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring_no_bf}_{imfstring}_100myr.mat' # bf not contained in filename because data stored assuming bf=1
             redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
         except:
             print(f'File not found for model {modelstring_no_bf} and Z {Z}, skipping...')
@@ -497,28 +505,32 @@ def asym_gauss_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_mean, log_Lx_per_S
     sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
     sigma_upper = log_Lx_per_SFR_max - log_Lx_per_SFR_mean
     sigma_lower = log_Lx_per_SFR_mean - log_Lx_per_SFR_min
+    sigma_total_upper = np.sqrt(sigma_model**2 + sigma_upper**2)
+    sigma_total_lower = np.sqrt(sigma_model**2 + sigma_lower**2)
+    prefactor = 1 / (sigma_total_upper + sigma_total_lower)
     if log_Lx_per_SFR_pred > log_Lx_per_SFR_mean:
-        sigma_total = np.sqrt(sigma_model**2 + sigma_upper**2)
+        sigma_denom = sigma_total_upper
     else:
-        sigma_total = np.sqrt(sigma_model**2 + sigma_lower**2)
-    return np.exp(-0.5 * ((log_Lx_per_SFR_pred - log_Lx_per_SFR_mean) / sigma_total)**2)
+        sigma_denom = sigma_total_lower
+    return prefactor * np.exp(-0.5 * ((log_Lx_per_SFR_pred - log_Lx_per_SFR_mean) / sigma_denom)**2)
 
+'''
 def upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_upperlim):
     # likelihood for upper limits using error function. L21 says D15 upper limits are 84% (1sigma) upper limits so we take the upper limit itself as the measurement part of the error.
     sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
     erf_numerator = log_Lx_per_SFR_upperlim - log_Lx_per_SFR_pred
     erf_denominator = np.sqrt(2 * (sigma_model**2 + log_Lx_per_SFR_upperlim**2))
     return 0.5 * (1 + sp.erf(erf_numerator / erf_denominator))
-
 '''
+    
 def upperlim_likelihood(log_Lx_per_SFR_pred, log_Lx_per_SFR_upperlim):
     # same as previous but instead we interpret upper limits as non-detections (measured value = 0) with an error bar equal to the upper limit
     # use gaussian likelihood in log space
     sigma_model = 0.2 # ad-hoc model uncertainty of 0.2 dex
     sigma_total = np.sqrt(sigma_model**2 + log_Lx_per_SFR_upperlim**2)
-    return np.exp(-0.5 * ((log_Lx_per_SFR_pred - 0) / sigma_total)**2)
-'''
-    
+    prefactor = 1 / sigma_total
+    return prefactor * np.exp(-0.5 * ((log_Lx_per_SFR_pred - 0) / sigma_total)**2)
+
 # calculate likelihood for each model against each data point
 # model not calculated at the same metallicities of each data point so we interpolate the model predictions to the metallicity of each data point for likelihood calculation
 
@@ -564,11 +576,13 @@ for modelstring_index, modelstring in enumerate(modelstrings):
 total_model_likelihoods = np.prod(model_likelihoods, axis=1)
 
 # rank models by likelihood and print the top 100 and bottom 100
+log_L_over_Lmax = np.log10(total_model_likelihoods / np.max(total_model_likelihoods))
 model_ranking_indices = np.argsort(total_model_likelihoods)[::-1] # sort in descending order
 for rank, model_index in enumerate(model_ranking_indices):
     if rank < 100 or rank >= len(model_ranking_indices) - 100:
-        print(f'Rank {rank+1}: Model {modelstrings[model_index]} with likelihood {total_model_likelihoods[model_index]}')
+        print(f'Rank {rank+1}: Model {modelstrings[model_index]} with likelihood {log_L_over_Lmax[model_index]}')
 
+'''
 # print Lx/SFR against Z for top 5 models
 print('Lx/SFR against Z for top 5 models:')
 for rank in range(5):
@@ -577,6 +591,7 @@ for rank in range(5):
     log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[model_index])
     for Z, log_Lx_per_SFR in zip(all_log_Z_model, log_Lx_per_SFR_model):
         print(f'Z: {Z}, log_Lx/SFR: {log_Lx_per_SFR}')
+'''
 
 # get fragos data and calculate its likelihood with respect to the data
 fragos_data = np.genfromtxt('./fragos_13.txt')
@@ -603,6 +618,7 @@ print(f'Fragos 2013 model likelihood: {total_fragos_likelihood}')
 
 # plot distribution of likelihoods
 
+'''
 logL_over_Lmax = np.log10(total_model_likelihoods / np.max(total_model_likelihoods))
 plt.figure()
 plt.hist(logL_over_Lmax, bins=100)
@@ -614,6 +630,7 @@ plt.xlabel(r'$\log_{10}(L/L_{max})$')
 plt.ylabel('Number of models')
 plt.savefig(f'./likelihood_distribution.pdf', dpi=300, bbox_inches='tight')
 plt.show()
+'''
 
 # repeat constraints plot but now with model predictions overplotted
 # for datasets not used in inference, add opacity to the points to indicate they were not used
@@ -640,10 +657,10 @@ for modelstring_index, modelstring in enumerate(modelstrings):
     if np.isnan(all_models_Lx_per_SFR[modelstring_index]).all():
         continue
     log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
-    plt.plot(all_log_Z_model, log_Lx_per_SFR_model, color='C0', alpha=0.1)
+    plt.plot(all_log_Z_model, log_Lx_per_SFR_model, color='C0', alpha=0.5)
 
 # take mean of the n highest likelihood models and plot as a thicker line
-n_top_models = 1
+n_top_models = 10
 top_model_indices = model_ranking_indices[:n_top_models]
 top_models_Lx_per_SFR = all_models_Lx_per_SFR[top_model_indices]
 top_models_log_Lx_per_SFR = np.log10(top_models_Lx_per_SFR)
@@ -653,10 +670,10 @@ plt.plot(all_log_Z_model, mean_top_models_log_Lx_per_SFR, color='C1', linewidth=
 # Plot PS constraint from Fragos 2013
 plt.plot(fragos_log_Z, fragos_log_Lx_per_SFR, color='cyan', linestyle='--', label='F13(PS)')
 
-plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]')
+plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]',fontsize=14)
 #plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
-plt.xlabel(r'$\log_{10}Z$')
-plt.ylim(37,43)
+plt.xlabel(r'$\log_{10}Z$',fontsize=14)
+plt.ylim(37,42)
 plt.xlim(-3.5,-1.25)
 
 # Enable ticks and grid
@@ -668,5 +685,3 @@ plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
 plt.savefig(f'./Lx_per_SFR_constraints_with_models.pdf', dpi=300, bbox_inches='tight')
 #plt.show()
-
-

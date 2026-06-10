@@ -1,3 +1,4 @@
 sdss_data/*.fit
 *.png
 *.pdf
+__pycache__
