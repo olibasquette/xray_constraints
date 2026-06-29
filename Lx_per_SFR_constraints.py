@@ -22,7 +22,7 @@ plt.rcParams.update({
 
 ### Constraints on Lx per SFR at various metallicities for short-lived population (<100myr) ###
 
-IMF = 'Salpeter' # target IMF used for SFR estimates in all datasets (corrections applied as needed for conversion)
+IMF = 'KroupaWeidner' # target IMF used for SFR estimates in all datasets (corrections applied as needed for conversion)
 salp_to_kr_SFR = 0.67 # from Madau & Dickinson 2014
 kr_to_salp_SFR = 1 / salp_to_kr_SFR
 salp_to_chab_SFR = 0.63 # from Madau & Dickinson 2014
@@ -402,6 +402,7 @@ plt.show()
 # import Lx/SFR simulations for all models and extract z=0 values. interpolate over metallicity to get Lx/SFR against metallicity for each model.
 # plot these against metallicity over the observations to have a look
 imfstring = 'PL-0.1-100-2.35'
+#imfstring = 'Kr3-canonical-2.35-100'
 KeV_to_Hz = 2.417990504024e17
 freq_lower_cutoff = 0.5*KeV_to_Hz
 freq_upper_cutoff = 8.0*KeV_to_Hz
@@ -425,16 +426,19 @@ model_metallicities = np.array([0.00056,0.0018,0.005,0.008,0.016]) # absolute Z
 #model_metallicities = np.array([0.00056,0.0018]) # absolute Z
 all_log_Z_model = np.log10(model_metallicities)
 model_bh_prescriptions = np.array([2])
-model_wind_prescriptions = np.array([1])
+model_wind_prescriptions = np.array([1,3])
 model_wind_multipliers_MS = np.array([1])
 model_wind_multipliers_GB = np.array([1])
 model_wind_multipliers_AGB = np.array([0.1,1,10])
 model_wind_multipliers_WR = np.array([1])
 model_wind_multipliers_LBV = np.array([0.1,1,10])
-model_twin_fractions = np.array([0,0.1,0.2,0.3,0.4,0.5])
+model_twin_fractions = np.array([0,0.1,0.2,0.3])
+#model_twin_fractions = np.array([0])
+#model_twin_fractions = np.array([0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]) # not used in modelstring but used later to scale for plotting
 model_alphas_ce = np.array([0.2,1])
-#model_bfs = np.array([0.2,0.3,0.4,0.5,0.6,0.7,0.8]) # not used in modelstring but used later to scale for plotting
-model_bfs = np.array([0.5]) # not used in modelstring but used later to scale for plotting
+#model_bfs = np.linspace(0.05,0.95,200)
+#model_bfs = np.array([0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]) # not used in modelstring but used later to scale for plotting
+model_bfs = np.array([1]) # not used in modelstring but used later to scale for plotting
 modelstrings = []
 modelstrings_no_bf = []
 
@@ -480,7 +484,7 @@ for modelstring_index, modelstring in enumerate(modelstrings):
     for Z_index, Z in enumerate(model_metallicities):
         # find the file for this model and metallicity
         try:
-            redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data_60/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring_no_bf}_{imfstring}_100myr.mat' # bf not contained in filename because data stored assuming bf=1
+            redshift_evolution_data_file = f'../xrb_synthesis/Lx_per_SFR_generation/redshift_evolution_data_60_massbf/Lnu_per_SFR_attenuated_Z_{Z}_{modelstring_no_bf}_{imfstring}_100myr.mat' # bf not contained in filename because data stored assuming bf=1
             redshift_evolution_data = sio.loadmat(redshift_evolution_data_file)
         except:
             print(f'File not found for model {modelstring_no_bf} and Z {Z}, skipping...')
@@ -657,20 +661,23 @@ for modelstring_index, modelstring in enumerate(modelstrings):
     if np.isnan(all_models_Lx_per_SFR[modelstring_index]).all():
         continue
     log_Lx_per_SFR_model = np.log10(all_models_Lx_per_SFR[modelstring_index])
-    plt.plot(all_log_Z_model, log_Lx_per_SFR_model, color='C0', alpha=0.5)
+    plt.plot(all_log_Z_model, log_Lx_per_SFR_model, color='#6ba4ff', alpha=0.05)
 
 # take mean of the n highest likelihood models and plot as a thicker line
-n_top_models = 10
+n_top_models = 1
 top_model_indices = model_ranking_indices[:n_top_models]
 top_models_Lx_per_SFR = all_models_Lx_per_SFR[top_model_indices]
 top_models_log_Lx_per_SFR = np.log10(top_models_Lx_per_SFR)
 mean_top_models_log_Lx_per_SFR = np.nanmean(top_models_log_Lx_per_SFR, axis=0)
-plt.plot(all_log_Z_model, mean_top_models_log_Lx_per_SFR, color='C1', linewidth=3, label=f'Mean of top {n_top_models} models')
+if n_top_models > 1:
+    plt.plot(all_log_Z_model, mean_top_models_log_Lx_per_SFR, color='C1', linewidth=3, label=f'Mean of top {n_top_models} models')
+elif n_top_models == 1:
+    plt.plot(all_log_Z_model, mean_top_models_log_Lx_per_SFR, color='C1', linewidth=3, label=f'Best-fit model')
 
 # Plot PS constraint from Fragos 2013
 plt.plot(fragos_log_Z, fragos_log_Lx_per_SFR, color='cyan', linestyle='--', label='F13(PS)')
 
-plt.ylabel(r'$\log_{10}(L_X/\mathrm{SFR})$ [erg s$^{-1}$ / $M_\odot$ yr$^{-1}$]',fontsize=14)
+plt.ylabel(r'$L_{X,0.5-8\mathrm{keV}}/\mathrm{SFR}$ [erg s$^{-1}$ Hz$^{-1}$ $M^{-1}_\odot$ yr]',fontsize=14)
 #plt.xlabel(r'$12 + \log_{10}(\mathrm{O/H})$')
 plt.xlabel(r'$\log_{10}Z$',fontsize=14)
 plt.ylim(37,42)
